@@ -2,5 +2,6 @@
 pragma solidity ^0.8.22;
 
 interface IExchange {
+
     
 }

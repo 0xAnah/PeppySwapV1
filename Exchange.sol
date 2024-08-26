@@ -21,8 +21,31 @@ contract Exchange is ERC20 {
      * @param _tokenAmount the amount of the tokens the user want to add to the LP
      */
     function addLiquidity(uint256 _tokenAmount) public payable returns(uint256 shares) {
-        // transfer _tokenAmount amount of user tokens to this exchange contract
-        token.transferFrom(msg.sender,address(this), _tokenAmount);
+        // if the exchange contract has no ERC20 token or eth (i.e if its reserves are empty)
+        // just accept the the transfer as this is the first time liquidity is being added to the 
+        // exchange
+        if (getReserve() == 0) {
+            token.transferFrom(msg.sender, address(this), _tokenAmount);
+        } else {
+        // else if the exchange reserves are not empty ensure that the price ratio does not 
+        // change with added liquidity.
+            // ethReserve is the amount of eth owned by the exchange contract before
+            // it is given by address(this).balance - msg.value because we have to subtract
+            // the eth sent to this function call.
+            uint256 ethReserve = address(this).balance - msg.value;
+            // get the total ERC20 token owned by the exchange contract
+            uint256 tokenReserve = getReserve();
+            // ensure that price is maintained when adding liquidity therefore ratio of token 
+            // to eth in reserves should be equal to ratio of token to eth to be added
+            // tokenReserve / ethReserve = tokenAdded / ethAdded
+            // cross multiplying we have:
+            // tokenReserve * ethAdded =  ethReserve * tokenAdded
+            require(tokenReserve * msg.value == ethReserve * _tokenAmount, "Invalid Tokens amount");
+
+            // send the ERC20 tokens from the sender to the exchange
+            token.transferFrom(msg.sender, address(this), _tokenAmount);
+
+        }
     }
 
     /**
@@ -44,8 +67,9 @@ contract Exchange is ERC20 {
      * would be the token amount.
      */
     function getPrice(uint256 inputReserve, uint256 outputReserve) public pure returns (uint256) {
-
+        // ensure the exchange has eth and the ERC20 tokens
         require(inputReserve > 0 && outputReserve > 0, "invalid reserves");
+        // calculate price
         return inputReserve / outputReserve;
     }
 
@@ -66,7 +90,9 @@ contract Exchange is ERC20 {
      * ERC20 token) owned by the contract
      */
     function getAmount(uint256 inputAmount, uint256 inputReserve, uint256 outputReserve) private pure returns (uint256) {
+        // ensure the exchange has eth and the ERC20 tokens
         require(inputReserve > 0 && outputReserve > 0, "invalid reserves");
+        // perform the calculation for dy the output amount
         return (inputAmount * outputReserve) / (inputReserve + inputAmount);
     }
 
@@ -76,8 +102,11 @@ contract Exchange is ERC20 {
      * @param _ethSold The amount of eth to be swap
      */
     function getTokenAmount(uint256 _ethSold) public view returns (uint256) {
+        // ensure eth amount is not zero
         require(_ethSold > 0, "ethSold is too small");
+        // get the total amount of ERC20 tokens owned by the exchange contract
         uint256 tokenReserve = getReserve();
+        // calculate the amount of token the user should expect to receive in return
         return getAmount(_ethSold, address(this).balance, tokenReserve);
     }
 
@@ -87,8 +116,11 @@ contract Exchange is ERC20 {
      * @param _tokenSold The amount of eth to be swap
      */
     function getEthAmount(uint256 _tokenSold) public view returns (uint256) {
+        // ensure token amount is not zero
         require(_tokenSold > 0, "tokenSold is too small");
+        // get the total amount of ERC20 tokens owned by the exchange contract
         uint256 tokenReserve = getReserve();
+        // calculate the amount of eth user should expect to receive in return 
         return getAmount(_tokenSold, tokenReserve, address(this).balance);
     }
 

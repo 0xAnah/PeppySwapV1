@@ -26,6 +26,13 @@ contract Exchange is ERC20 {
         // exchange
         if (getReserve() == 0) {
             token.transferFrom(msg.sender, address(this), _tokenAmount);
+            // since this is the first time liquidity is be added to the exchange the 
+            // liquidity provider share would be equal to the amount of eth sent to the pool
+            // (some other sources I read said that it calculates the goemetric mean of the amount
+            // of eth and the ERC20 token sent to the pool)
+            shares = address(this).balance;
+            // mint liquidity provider shares
+            _mint(msg.sender, shares);
         } else {
         // else if the exchange reserves are not empty ensure that the price ratio does not 
         // change with added liquidity.
@@ -44,7 +51,11 @@ contract Exchange is ERC20 {
 
             // send the ERC20 tokens from the sender to the exchange
             token.transferFrom(msg.sender, address(this), _tokenAmount);
-
+            // apart from the first time liquidity is added to an exchange the calulation for the shares
+            // for subsequently adding liquidity is given by:
+            // sharesMinted = totalSharesAmount ∗ ethReserve / ethDeposited​
+            shares = (totalSupply() * msg.value) / ethReserve;
+            _mint(msg.sender, shares);
         }
     }
 
@@ -92,8 +103,10 @@ contract Exchange is ERC20 {
     function getAmount(uint256 inputAmount, uint256 inputReserve, uint256 outputReserve) private pure returns (uint256) {
         // ensure the exchange has eth and the ERC20 tokens
         require(inputReserve > 0 && outputReserve > 0, "invalid reserves");
+        // deduct input amount by 0.3%
+        uint256 inputAmountWithFees = (inputAmount * 997) / 1000;
         // perform the calculation for dy the output amount
-        return (inputAmount * outputReserve) / (inputReserve + inputAmount);
+        return (inputAmountWithFees * outputReserve) / (inputReserve + inputAmountWithFees);
     }
 
     /**

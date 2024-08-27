@@ -3,14 +3,17 @@ pragma solidity ^0.8.22;
 
 import {IExchange} from "./IExchange.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IFactory} from "./IFactory.sol";
 
-contract Exchange is ERC20 {
+contract Exchange is IExchange, ERC20 {
 
     ERC20 public immutable token;
+    address public immutable factoryAddress;
 
     constructor(address _tokenAddress) ERC20("Peppyswap-V1", "Peppy-V1") {
         require(_tokenAddress != address(0), "Token address cannot be zero address");
         token = ERC20(_tokenAddress);
+        factoryAddress = msg.sender;
     }
 
     /**
@@ -175,18 +178,59 @@ contract Exchange is ERC20 {
         // transfer eth to the user
         payable(msg.sender).transfer(ethBought);
     }
-
+    /**
+     * @dev This function is called by a liquidity provider that wants to remove all or part of
+     *  his liquidity
+     * 
+     * @param _shares The amount of shares the liquidity provider wants to sell
+     * @return the amount of eth sent to the liquidity provider
+     * @return the amount of ERC20 tokens sent to the liquidity provider
+     */
     function removeLiquidity(uint256 _shares) public returns (uint256, uint256) {
+        // ensure shares to be removed is greater than 0
         require(_shares > 0, "invalid amount");
 
+        // calculate user's eth based on his shares 
         uint256 ethAmount = (address(this).balance * _shares) / totalSupply();
+        // calculate user's ERC20 tokens based on his shares
         uint256 tokenAmount = (getReserve() * _shares) / totalSupply();
 
+        // remove user shares from circulation
+        // if user does not have the amount of shares specified the transaction reverts
         _burn(msg.sender, _shares);
         payable(msg.sender).transfer(ethAmount);
         token.transfer(msg.sender, tokenAmount);
 
         return (ethAmount, tokenAmount);
+    }
+
+
+    /**
+     * 
+     * @param _tokensSold  The amount of tokens the user wants to swap
+     * @param _minTokensBought The minimum amount of ERC20 token the swapper expects to receive
+     * @param _tokenAddress the address of the ERC20 token the user wants to swap to
+     */
+    function tokenToTokenSwap(uint256 _tokensSold, uint256 _minTokensBought, address _tokenAddress) public {
+        // get the exchange address for the required ERC20 token address
+        address exchangeAddress = IFactory(factoryAddress).getExchange(_tokenAddress);
+        // ensure the required ERC20 token exchange address is not this address and that it exist
+        require(exchangeAddress != address(this) && exchangeAddress != address(0), "invalid exchange address");
+
+        uint256 tokenReserve = getReserve();
+        // calculate the amount of eth user sent ERC20 can buy
+        uint256 ethBought = getAmount(_tokensSold, tokenReserve, address(this).balance);
+        // transfer the sent ERC20 token to this exchange contract
+        token.transferFrom(msg.sender, address(this), _tokensSold);
+
+        // make an external call to the required ERC20 token and perform an eth to token swap
+        // but note that the required ERC20 tokens would be sent to this exchange address
+        // instead of the swapper since this exchange would be the msg.sender 
+        Exchange(exchangeAddress).ethToTokenSwap{value: ethBought}(_minTokensBought);
+        // get the amount of the required ERC20 token sent to this address
+        uint256 newTokenBalance = ERC20(_tokenAddress).balanceOf(address(this));
+        // send the required ERC20 tokens to the swapper
+        ERC20(_tokenAddress).transfer(msg.sender, newTokenBalance);
     }
 
 

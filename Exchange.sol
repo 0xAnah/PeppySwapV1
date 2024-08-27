@@ -176,5 +176,18 @@ contract Exchange is ERC20 {
         payable(msg.sender).transfer(ethBought);
     }
 
+    function removeLiquidity(uint256 _shares) public returns (uint256, uint256) {
+        require(_shares > 0, "invalid amount");
+
+        uint256 ethAmount = (address(this).balance * _shares) / totalSupply();
+        uint256 tokenAmount = (getReserve() * _shares) / totalSupply();
+
+        _burn(msg.sender, _shares);
+        payable(msg.sender).transfer(ethAmount);
+        token.transfer(msg.sender, tokenAmount);
+
+        return (ethAmount, tokenAmount);
+    }
+
 
 }

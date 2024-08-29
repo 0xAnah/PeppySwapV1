@@ -206,7 +206,10 @@ contract Exchange is IExchange, ERC20 {
 
 
     /**
-     * 
+     * @dev This function is called when a user wants to swap one ERC20 token for another
+     * ERC20 token. This is done by first swaping the user ERC20 to eth then calling the 
+     * the required ERC20 token exchange contract to perform an eth to the required ERC20 token
+     * swap
      * @param _tokensSold  The amount of tokens the user wants to swap
      * @param _minTokensBought The minimum amount of ERC20 token the swapper expects to receive
      * @param _tokenAddress the address of the ERC20 token the user wants to swap to
